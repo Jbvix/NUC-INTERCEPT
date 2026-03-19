@@ -202,6 +202,16 @@ const App = () => {
     if (!leafletMap.current) return;
     const map = leafletMap.current;
 
+    // Se estivermos numa visualização de iframe (overlayView ativo), escondemos todas as camadas base
+    // para que a cache do Leaflet mostre o fundo transparente e revele o iframe por trás.
+    if (overlayView) {
+      if (map.hasLayer(satLayerRef.current)) map.removeLayer(satLayerRef.current);
+      if (map.hasLayer(osmLayerRef.current)) map.removeLayer(osmLayerRef.current);
+      if (map.hasLayer(densityLayerRef.current)) map.removeLayer(densityLayerRef.current);
+      if (map.hasLayer(nauticalLayerRef.current)) map.removeLayer(nauticalLayerRef.current);
+      return;
+    }
+
     // Gestão do Mapa Base
     if (baseMap === 'osm') {
       if (map.hasLayer(satLayerRef.current)) map.removeLayer(satLayerRef.current);
@@ -224,7 +234,7 @@ const App = () => {
     } else {
       if (map.hasLayer(nauticalLayerRef.current)) map.removeLayer(nauticalLayerRef.current);
     }
-  }, [baseMap, showNautical, showDensity, leafletLoaded]);
+  }, [baseMap, showNautical, showDensity, overlayView, leafletLoaded]);
 
   // Renderização Visual Dinâmica de Marcadores e Linhas
   useEffect(() => {
@@ -289,13 +299,29 @@ const App = () => {
           )}
         </div>
       </header>
+      
+      {/* Botão de Fechar Overlay Sempre Visível Acima de Tudo */}
+      {overlayView && (
+        <button onClick={() => setOverlayView(null)} className="absolute top-20 left-4 z-[3000] flex items-center gap-2 px-4 py-2 bg-slate-900/90 text-white rounded-full border border-slate-700 font-bold text-xs shadow-xl hover:bg-slate-800 cursor-pointer">
+          <ChevronLeft size={16} /> MAPA BASE
+        </button>
+      )}
 
       {/* --- ÁREA PRINCIPAL --- */}
       <main className="flex-1 relative bg-slate-950">
         
+        {/* --- IFRAMES EM BACKGROUND --- */}
+        <div className={`absolute inset-0 z-[500] transition-opacity duration-300 ${overlayView === 'windy' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {windyUrl && <iframe src={windyUrl} className="w-full h-full border-none" title="Windy" />}
+        </div>
+
+        <div className={`absolute inset-0 z-[500] transition-opacity duration-300 ${overlayView === 'traffic' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {trafficUrl && <iframe src={trafficUrl} className="w-full h-full border-none" title="Marine Traffic" />}
+        </div>
+
         {/* --- MAPA TÁTICO --- */}
-        <div className={`h-full w-full absolute transition-opacity duration-300 ${overlayView || activeTab !== 'map' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-          <div ref={mapRef} className={`h-full w-full ${mapMode !== 'VIEW' ? 'cursor-crosshair' : 'cursor-default'}`} />
+        <div className={`h-full w-full absolute transition-opacity duration-300 ${activeTab !== 'map' ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${overlayView ? 'pointer-events-none z-[1000]' : 'z-[1000] pointer-events-auto'}`}>
+          <div ref={mapRef} className={`h-full w-full bg-transparent ${mapMode !== 'VIEW' ? 'cursor-crosshair' : 'cursor-default'}`} />
           
           {/* AVISOS DE INSTRUÇÃO (STATE MACHINE) */}
           {mapMode === 'SET_TARGET' && (
@@ -310,7 +336,7 @@ const App = () => {
           )}
 
           {/* MENU FLUTUANTE DE CAMADAS CARTOGRÁFICAS (UX CENTRALIZADA v2.4.0) */}
-          <div className="absolute top-6 right-4 z-[1000]">
+          <div className="absolute top-6 right-4 z-[1000] pointer-events-auto">
             <button 
               onClick={() => setShowLayerMenu(!showLayerMenu)}
               className="p-3 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-2xl shadow-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
@@ -365,13 +391,33 @@ const App = () => {
                   <div className="flex gap-2">
                     <button 
                       onClick={() => {
-                        if (!windyUrl) {
-                          const lat = targetPos ? targetPos.lat : -3.717;
-                          const lng = targetPos ? targetPos.lng : -38.483;
-                          setWindyUrl(`https://www.windy.com/?${lat},${lng},5`);
-                        }
+                        const lat = targetPos ? targetPos.lat : -3.717;
+                        const lng = targetPos ? targetPos.lng : -38.483;
+                        const params = new URLSearchParams({
+                          lat: lat.toString(),
+                          lon: lng.toString(),
+                          zoom: '5',
+                          level: 'surface',
+                          overlay: 'wind',
+                          menu: '',
+                          message: 'true',
+                          marker: targetPos ? `${targetPos.lat},${targetPos.lng}` : '',
+                          calendar: 'now',
+                          pressure: '',
+                          type: 'map',
+                          location: 'coordinates',
+                          detail: '',
+                          metricWind: 'kt',
+                          metricTemp: '°C',
+                          radarRange: '-1'
+                        });
+                        setWindyUrl(`https://embed.windy.com/embed.html?${params.toString()}`);
+                        
                         setOverlayView('windy');
                         setShowLayerMenu(false);
+                        if (leafletMap.current) {
+                          leafletMap.current.setView([lat, lng], 5);
+                        }
                       }}
                       className="flex-1 flex flex-col justify-center items-center py-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 text-blue-400 transition-colors"
                     >
@@ -380,13 +426,14 @@ const App = () => {
                     </button>
                     <button 
                       onClick={() => {
-                        if (!trafficUrl) {
-                          const lat = targetPos ? targetPos.lat : -3.717;
-                          const lng = targetPos ? targetPos.lng : -38.483;
-                          setTrafficUrl(`https://www.marinetraffic.com/en/ais/embed/centerx:${lng}/centery:${lat}/zoom:5/mmsi:0/showmenu:false`);
-                        }
+                        const lat = targetPos ? targetPos.lat : -3.717;
+                        const lng = targetPos ? targetPos.lng : -38.483;
+                        setTrafficUrl(`https://www.marinetraffic.com/en/ais/embed/centerx:${lng}/centery:${lat}/zoom:5/mmsi:0/showmenu:false`);
                         setOverlayView('traffic');
                         setShowLayerMenu(false);
+                        if (leafletMap.current) {
+                          leafletMap.current.setView([lat, lng], 5);
+                        }
                       }}
                       className="flex-1 flex flex-col justify-center items-center py-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 text-emerald-400 transition-colors"
                     >
@@ -428,17 +475,6 @@ const App = () => {
               )}
             </div>
           </div>
-        </div>
-
-        {/* --- OVERLAYS INTELIGENTES EM CACHE (LAZY LOAD) --- */}
-        <div className={`absolute inset-0 z-[1500] bg-slate-950 transition-opacity duration-300 ${overlayView === 'windy' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-          <button onClick={() => setOverlayView(null)} className="absolute top-4 left-4 z-[1600] flex items-center gap-2 px-4 py-2 bg-slate-900/90 text-white rounded-full border border-slate-700 font-bold text-xs shadow-xl"><ChevronLeft size={16} /> MAPA BASE</button>
-          {windyUrl && <iframe src={windyUrl} className="w-full h-full border-none" title="Windy" />}
-        </div>
-
-        <div className={`absolute inset-0 z-[1500] bg-slate-950 transition-opacity duration-300 ${overlayView === 'traffic' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-          <button onClick={() => setOverlayView(null)} className="absolute top-4 left-4 z-[1600] flex items-center gap-2 px-4 py-2 bg-slate-900/90 text-white rounded-full border border-slate-700 font-bold text-xs shadow-xl"><ChevronLeft size={16} /> MAPA BASE</button>
-          {trafficUrl && <iframe src={trafficUrl} className="w-full h-full border-none" title="Marine Traffic" />}
         </div>
 
         {/* --- ABA: CALCULADORA AMBIENTAL (VETORES) --- */}
