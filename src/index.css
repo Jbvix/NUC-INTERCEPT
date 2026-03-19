@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .leaflet-container { background: #020617 !important; }
+  .cursor-crosshair { cursor: crosshair !important; }
+  
+  input[type="range"] { 
+    -webkit-appearance: none; 
+    background: #1e293b; 
+    height: 8px; 
+    border-radius: 10px; 
+    width: 100%; 
+    outline: none; 
+  }
+  
+  input[type="range"]::-webkit-slider-thumb { 
+    -webkit-appearance: none; 
+    height: 24px; 
+    width: 24px; 
+    border-radius: 50%; 
+    background: currentColor; 
+    border: 2px solid #0f172a; 
+    box-shadow: 0 0 10px rgba(0,0,0,0.5); 
+    cursor: pointer; 
+  }
+}
