@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Layers,
   Globe2,
+  ToggleLeft,
   ToggleRight,
   Ship,
   Lock,
