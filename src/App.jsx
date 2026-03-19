@@ -164,42 +164,6 @@ const App = () => {
 
   const isEtaSynced = waypoints.length >= 2 && Math.abs(routeData.etaTransit - interceptETA) <= (interceptETA * 0.05);
 
-  const targetPosRef = useRef(targetPos);
-  useEffect(() => { targetPosRef.current = targetPos; }, [targetPos]);
-
-  // Resnap iframe quando usuário LIGA o cadeado dnv.
-  useEffect(() => {
-    if (isOverlayLocked && overlayView && leafletMap.current) {
-      const center = leafletMap.current.getCenter();
-      const zoom = leafletMap.current.getZoom();
-      const tPos = targetPosRef.current;
-      
-      if (overlayView === 'windy') {
-        const params = new URLSearchParams({
-          lat: center.lat.toString(),
-          lon: center.lng.toString(),
-          zoom: zoom.toString(),
-          level: 'surface',
-          overlay: 'wind',
-          menu: '',
-          message: 'true',
-          marker: tPos ? `${tPos.lat},${tPos.lng}` : '',
-          calendar: 'now',
-          pressure: '',
-          type: 'map',
-          location: 'coordinates',
-          detail: '',
-          metricWind: 'kt',
-          metricTemp: '°C',
-          radarRange: '-1'
-        });
-        setWindyUrl(`https://embed.windy.com/embed.html?${params.toString()}`);
-      } else if (overlayView === 'traffic') {
-        setTrafficUrl(`https://www.marinetraffic.com/en/ais/embed/centerx:${center.lng}/centery:${center.lat}/zoom:${zoom}/mmsi:0/showmenu:false`);
-      }
-    }
-  }, [isOverlayLocked, overlayView]);
-
   // =======================================================================
   // INICIALIZAÇÃO E EVENTOS DO MAPA (LEAFLET)
   // =======================================================================
