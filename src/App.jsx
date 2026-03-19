@@ -72,6 +72,19 @@ const App = () => {
   // --- ESTADOS DE MÁQUINAS E DERROTA ---
   const [tugSpeed, setTugSpeed] = useState(10); 
   const [tugFuelRate, setTugFuelRate] = useState(150); 
+  
+  // --- ESTADOS DO NUC (ALVO) ---
+  const [nucLOA, setNucLOA] = useState(250); 
+  const [nucDWT, setNucDWT] = useState(100000); 
+  const [nucDraft, setNucDraft] = useState(12);
+
+  // --- CÁLCULO DA VELOCIDADE DE REBOQUE ---
+  const towingSpeed = useMemo(() => {
+    let speed = tugSpeed * 0.7; 
+    speed -= (nucDWT / 50000); 
+    speed -= (nucDraft > 10 ? (nucDraft - 10) * 0.2 : 0); 
+    return Math.max(1.5, speed); 
+  }, [tugSpeed, nucDWT, nucDraft]);
 
   // --- INTERFACE E LAZY LOADING ---
   const [activeTab, setActiveTab] = useState('map'); 
@@ -132,20 +145,24 @@ const App = () => {
   };
 
   const routeData = useMemo(() => {
-    if (waypoints.length < 2) return { distance: 0, eta: 0, fuel: 0 };
+    if (waypoints.length < 2) return { distTransit: 0, distTow: 0, etaTransit: 0, etaTow: 0, totalEta: 0, fuel: 0 };
     
-    let totalDist = 0;
-    for (let i = 0; i < waypoints.length - 1; i++) {
-      totalDist += calculateDist(waypoints[i], waypoints[i+1]);
+    let distTransit = calculateDist(waypoints[0], waypoints[1]);
+    let distTow = 0;
+
+    for (let i = 1; i < waypoints.length - 1; i++) {
+      distTow += calculateDist(waypoints[i], waypoints[i+1]);
     }
     
-    const eta = totalDist / tugSpeed;
-    const fuel = eta * tugFuelRate;
+    const etaTransit = distTransit / tugSpeed;
+    const etaTow = distTow > 0 ? distTow / towingSpeed : 0;
+    const totalEta = etaTransit + etaTow;
+    const fuel = totalEta * tugFuelRate;
 
-    return { distance: totalDist, eta: eta, fuel: fuel };
-  }, [waypoints, tugSpeed, tugFuelRate]);
+    return { distTransit, distTow, etaTransit, etaTow, totalEta, fuel };
+  }, [waypoints, tugSpeed, towingSpeed, tugFuelRate]);
 
-  const isEtaSynced = waypoints.length >= 2 && Math.abs(routeData.eta - interceptETA) <= (interceptETA * 0.05);
+  const isEtaSynced = waypoints.length >= 2 && Math.abs(routeData.etaTransit - interceptETA) <= (interceptETA * 0.05);
 
   // =======================================================================
   // INICIALIZAÇÃO E EVENTOS DO MAPA (LEAFLET)
@@ -187,6 +204,26 @@ const App = () => {
       setTimeout(() => {
         if (leafletMap.current) leafletMap.current.invalidateSize();
       }, 500);
+
+      leafletMap.current.on('moveend', () => {
+        if (!leafletMap.current) return;
+        const center = leafletMap.current.getCenter();
+        const zoom = leafletMap.current.getZoom();
+        
+        setWindyUrl(prev => {
+          if (!prev) return prev;
+          const p = new URLSearchParams(prev.split('?')[1]);
+          p.set('lat', center.lat.toString());
+          p.set('lon', center.lng.toString());
+          p.set('zoom', zoom.toString());
+          return `https://embed.windy.com/embed.html?${p.toString()}`;
+        });
+
+        setTrafficUrl(prev => {
+          if (!prev) return prev;
+          return `https://www.marinetraffic.com/en/ais/embed/centerx:${center.lng}/centery:${center.lat}/zoom:${zoom}/mmsi:0/showmenu:false`;
+        });
+      });
 
       leafletMap.current.on('click', (e) => {
         const currentMode = mapModeRef.current;
@@ -557,8 +594,8 @@ const App = () => {
             {/* SYNC DASHBOARD */}
             <div className="grid grid-cols-2 gap-4">
               <div className={`p-4 rounded-2xl border flex flex-col items-center justify-center text-center shadow-lg transition-colors ${isEtaSynced ? 'bg-emerald-900/30 border-emerald-500/50' : 'bg-slate-900 border-slate-700'}`}>
-                <span className="text-[10px] font-black uppercase text-slate-500 mb-1">ETA Rebocador</span>
-                <span className={`text-2xl font-mono font-black ${isEtaSynced ? 'text-emerald-400' : 'text-slate-200'}`}>{routeData.eta.toFixed(1)}<span className="text-sm">h</span></span>
+                <span className="text-[10px] font-black uppercase text-slate-500 mb-1">Fase 1 (Interceptar)</span>
+                <span className={`text-2xl font-mono font-black ${isEtaSynced ? 'text-emerald-400' : 'text-slate-200'}`}>{routeData.etaTransit.toFixed(1)}<span className="text-sm">h</span></span>
               </div>
               <div className="p-4 rounded-2xl border bg-slate-900 border-slate-700 flex flex-col items-center justify-center text-center shadow-lg">
                 <span className="text-[10px] font-black uppercase text-slate-500 mb-1">ETA Alvo (PIF)</span>
@@ -566,11 +603,31 @@ const App = () => {
               </div>
             </div>
 
+            {/* VARIÁVEIS HIDRODINÂMICAS DO ALVO (NUC) */}
+            <div className="bg-slate-900 p-5 rounded-2xl border border-purple-900/50 space-y-4 shadow-lg">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-xs font-black uppercase text-purple-400 flex items-center gap-2 m-0"><Activity size={16}/> Dinâmica: Reboque (Fase 2)</h3>
+                <span className="text-xs font-mono font-black text-purple-400">V.Reboque: {towingSpeed.toFixed(1)} Nós</span>
+              </div>
+              <div>
+                <div className="flex justify-between text-[10px] font-bold mb-2 uppercase text-slate-500"><span>Comprimento (LOA)</span><span className="text-purple-400 text-sm font-mono">{nucLOA} m</span></div>
+                <input type="range" min="50" max="400" step="5" value={nucLOA} onChange={(e) => setNucLOA(Number(e.target.value))} className="w-full accent-purple-500" />
+              </div>
+              <div>
+                <div className="flex justify-between text-[10px] font-bold mb-2 uppercase text-slate-500"><span>Porte Bruto (DWT)</span><span className="text-purple-400 text-sm font-mono">{nucDWT} tons</span></div>
+                <input type="range" min="1000" max="300000" step="5000" value={nucDWT} onChange={(e) => setNucDWT(Number(e.target.value))} className="w-full accent-purple-500" />
+              </div>
+              <div>
+                <div className="flex justify-between text-[10px] font-bold mb-2 uppercase text-slate-500"><span>Calado (Draft)</span><span className="text-purple-400 text-sm font-mono">{nucDraft.toFixed(1)} m</span></div>
+                <input type="range" min="2" max="25" step="0.5" value={nucDraft} onChange={(e) => setNucDraft(Number(e.target.value))} className="w-full accent-purple-500" />
+              </div>
+            </div>
+
             {/* MÁQUINAS E BUNKER */}
             <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-lg">
               <div className="flex justify-between items-center mb-2">
-                <h3 className="text-xs font-black uppercase text-slate-300 flex items-center gap-2 m-0"><Settings size={16}/> Máquinas & Desempenho</h3>
-                <span className="text-xs font-mono font-black text-blue-400">{routeData.distance.toFixed(1)} NM (Total)</span>
+                <h3 className="text-xs font-black uppercase text-slate-300 flex items-center gap-2 m-0"><Settings size={16}/> Trânsito Livre (Fase 1)</h3>
+                <span className="text-xs font-mono font-black text-blue-400">Total: {(routeData.distTransit + routeData.distTow).toFixed(1)} NM</span>
               </div>
               
               <div>
