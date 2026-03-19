@@ -19,9 +19,10 @@ import {
   AlertTriangle,
   Layers,
   Globe2,
-  ToggleLeft,
   ToggleRight,
-  Ship
+  Ship,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 /**
@@ -74,6 +75,7 @@ const App = () => {
   // --- INTERFACE E LAZY LOADING ---
   const [activeTab, setActiveTab] = useState('map'); 
   const [overlayView, setOverlayView] = useState(null); 
+  const [isOverlayLocked, setIsOverlayLocked] = useState(true);
   const [windyUrl, setWindyUrl] = useState(null); 
   const [trafficUrl, setTrafficUrl] = useState(null); 
 
@@ -179,6 +181,11 @@ const App = () => {
       // Injeta as camadas iniciais
       osmLayerRef.current.addTo(leafletMap.current);
       nauticalLayerRef.current.addTo(leafletMap.current);
+
+      // Correção de tela preta via recálculo interno Leaflet
+      setTimeout(() => {
+        if (leafletMap.current) leafletMap.current.invalidateSize();
+      }, 500);
 
       leafletMap.current.on('click', (e) => {
         const currentMode = mapModeRef.current;
@@ -305,11 +312,20 @@ const App = () => {
         </div>
       </header>
       
-      {/* Botão de Fechar Overlay Sempre Visível Acima de Tudo */}
+      {/* Botões de Overlay e Controle de Acesso */}
       {overlayView && (
-        <button onClick={() => setOverlayView(null)} className="absolute top-20 left-4 z-[3000] flex items-center gap-2 px-4 py-2 bg-slate-900/90 text-white rounded-full border border-slate-700 font-bold text-xs shadow-xl hover:bg-slate-800 cursor-pointer">
-          <ChevronLeft size={16} /> MAPA BASE
-        </button>
+        <div className="absolute top-20 left-4 z-[3000] flex flex-col gap-2">
+          <button onClick={() => { setOverlayView(null); setIsOverlayLocked(true); }} className="flex items-center gap-2 px-4 py-3 bg-slate-900/90 text-white rounded-xl border border-slate-700 font-bold text-xs shadow-2xl hover:bg-slate-800 cursor-pointer justify-center transition-all">
+            <ChevronLeft size={16} /> MAPA BASE
+          </button>
+          <button 
+            onClick={() => setIsOverlayLocked(!isOverlayLocked)} 
+            className={`flex items-center gap-2 px-4 py-3 text-white rounded-xl border font-bold text-[10px] shadow-2xl cursor-pointer transition-all justify-center ${isOverlayLocked ? 'bg-emerald-600/90 border-emerald-500 hover:bg-emerald-500' : 'bg-red-600/90 border-red-500 hover:bg-red-500'}`}
+          >
+            {isOverlayLocked ? <Lock size={14} /> : <Unlock size={14} />}
+            {isOverlayLocked ? 'CADEADO(ON): MAPA E FOCO LIVRE' : 'CADEADO(OFF): IFRAMES LIVRES'}
+          </button>
+        </div>
       )}
 
       {/* --- ÁREA PRINCIPAL --- */}
@@ -325,7 +341,7 @@ const App = () => {
         </div>
 
         {/* --- MAPA TÁTICO --- */}
-        <div className={`h-full w-full absolute transition-opacity duration-300 ${activeTab !== 'map' ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${overlayView ? 'pointer-events-none z-[1000]' : 'z-[1000] pointer-events-auto'}`}>
+        <div className={`h-full w-full absolute transition-opacity duration-300 ${activeTab !== 'map' ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${overlayView && !isOverlayLocked ? 'pointer-events-none z-[1000]' : 'z-[1000] pointer-events-auto'}`}>
           <div ref={mapRef} className={`h-full w-full bg-transparent ${mapMode !== 'VIEW' ? 'cursor-crosshair' : 'cursor-default'}`} />
           
           {/* AVISOS DE INSTRUÇÃO (STATE MACHINE) */}
