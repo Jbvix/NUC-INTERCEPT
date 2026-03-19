@@ -5,6 +5,7 @@
   .cursor-crosshair { cursor: crosshair !important; }
   
   input[type="range"] { 
+    appearance: none;
     -webkit-appearance: none; 
     background: #1e293b; 
     height: 8px; 
@@ -14,6 +15,7 @@
   }
   
   input[type="range"]::-webkit-slider-thumb { 
+    appearance: none;
     -webkit-appearance: none; 
     height: 24px; 
     width: 24px; 

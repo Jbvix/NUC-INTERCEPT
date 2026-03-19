@@ -202,17 +202,22 @@ const App = () => {
     if (!leafletMap.current) return;
     const map = leafletMap.current;
 
-    // Se estivermos numa visualização de iframe (overlayView ativo), escondemos todas as camadas base
-    // para que a cache do Leaflet mostre o fundo transparente e revele o iframe por trás.
+    // Se estivermos numa visualização de iframe (overlayView ativo), escondemos APENAS as camadas base opacas
     if (overlayView) {
       if (map.hasLayer(satLayerRef.current)) map.removeLayer(satLayerRef.current);
       if (map.hasLayer(osmLayerRef.current)) map.removeLayer(osmLayerRef.current);
       if (map.hasLayer(densityLayerRef.current)) map.removeLayer(densityLayerRef.current);
-      if (map.hasLayer(nauticalLayerRef.current)) map.removeLayer(nauticalLayerRef.current);
+      
+      // O OpenSeaMap (nauticalLayerRef) é transparente, permitimos ele se showNautical=true
+      if (showNautical) {
+        if (!map.hasLayer(nauticalLayerRef.current)) map.addLayer(nauticalLayerRef.current);
+      } else {
+        if (map.hasLayer(nauticalLayerRef.current)) map.removeLayer(nauticalLayerRef.current);
+      }
       return;
     }
 
-    // Gestão do Mapa Base
+    // Gestão do Mapa Base Normal
     if (baseMap === 'osm') {
       if (map.hasLayer(satLayerRef.current)) map.removeLayer(satLayerRef.current);
       if (!map.hasLayer(osmLayerRef.current)) map.addLayer(osmLayerRef.current);
@@ -228,7 +233,7 @@ const App = () => {
       if (map.hasLayer(densityLayerRef.current)) map.removeLayer(densityLayerRef.current);
     }
 
-    // Gestão do Overlay Náutico
+    // Gestão do Overlay Náutico OpenSeaMap
     if (showNautical) {
       if (!map.hasLayer(nauticalLayerRef.current)) map.addLayer(nauticalLayerRef.current);
     } else {
