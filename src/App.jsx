@@ -164,6 +164,42 @@ const App = () => {
 
   const isEtaSynced = waypoints.length >= 2 && Math.abs(routeData.etaTransit - interceptETA) <= (interceptETA * 0.05);
 
+  const targetPosRef = useRef(targetPos);
+  useEffect(() => { targetPosRef.current = targetPos; }, [targetPos]);
+
+  // Resnap iframe quando usuário LIGA o cadeado dnv.
+  useEffect(() => {
+    if (isOverlayLocked && overlayView && leafletMap.current) {
+      const center = leafletMap.current.getCenter();
+      const zoom = leafletMap.current.getZoom();
+      const tPos = targetPosRef.current;
+      
+      if (overlayView === 'windy') {
+        const params = new URLSearchParams({
+          lat: center.lat.toString(),
+          lon: center.lng.toString(),
+          zoom: zoom.toString(),
+          level: 'surface',
+          overlay: 'wind',
+          menu: '',
+          message: 'true',
+          marker: tPos ? `${tPos.lat},${tPos.lng}` : '',
+          calendar: 'now',
+          pressure: '',
+          type: 'map',
+          location: 'coordinates',
+          detail: '',
+          metricWind: 'kt',
+          metricTemp: '°C',
+          radarRange: '-1'
+        });
+        setWindyUrl(`https://embed.windy.com/embed.html?${params.toString()}`);
+      } else if (overlayView === 'traffic') {
+        setTrafficUrl(`https://www.marinetraffic.com/en/ais/embed/centerx:${center.lng}/centery:${center.lat}/zoom:${zoom}/mmsi:0/showmenu:false`);
+      }
+    }
+  }, [isOverlayLocked, overlayView]);
+
   // =======================================================================
   // INICIALIZAÇÃO E EVENTOS DO MAPA (LEAFLET)
   // =======================================================================
@@ -212,10 +248,13 @@ const App = () => {
         
         setWindyUrl(prev => {
           if (!prev) return prev;
-          const p = new URLSearchParams(prev.split('?')[1]);
+          const p = new URLSearchParams(prev.split('?')[1] || "");
           p.set('lat', center.lat.toString());
           p.set('lon', center.lng.toString());
           p.set('zoom', zoom.toString());
+          if (targetPosRef.current) {
+            p.set('marker', `${targetPosRef.current.lat},${targetPosRef.current.lng}`);
+          }
           return `https://embed.windy.com/embed.html?${p.toString()}`;
         });
 
@@ -388,7 +427,7 @@ const App = () => {
         </div>
 
         {/* --- MAPA TÁTICO --- */}
-        <div className={`h-full w-full absolute transition-opacity duration-300 ${activeTab !== 'map' ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${overlayView && !isOverlayLocked ? 'pointer-events-none z-[1000]' : 'z-[1000] pointer-events-auto'}`}>
+        <div className={`h-full w-full absolute transition-opacity duration-300 ${activeTab !== 'map' || (overlayView && !isOverlayLocked) ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${overlayView && !isOverlayLocked ? 'pointer-events-none z-[1000]' : 'z-[1000] pointer-events-auto'}`}>
           <div ref={mapRef} className={`h-full w-full bg-transparent ${mapMode !== 'VIEW' ? 'cursor-crosshair' : 'cursor-default'}`} />
           
           {/* AVISOS DE INSTRUÇÃO (STATE MACHINE) */}
