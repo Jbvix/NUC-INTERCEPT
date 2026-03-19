@@ -249,6 +249,15 @@ const App = () => {
     }
   }, [baseMap, showNautical, showDensity, overlayView, leafletLoaded]);
 
+  // Força atualização agressiva do layout do Leaflet para prevenir tela preta ao retornar da aba
+  useEffect(() => {
+    if (leafletMap.current && activeTab === 'map') {
+      setTimeout(() => {
+        leafletMap.current.invalidateSize(true);
+      }, 350);
+    }
+  }, [activeTab, overlayView]);
+
   // Renderização Visual Dinâmica de Marcadores e Linhas
   useEffect(() => {
     if (!leafletMap.current || !window.L) return;
